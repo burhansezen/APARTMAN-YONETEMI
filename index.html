@@ -1,0 +1,835 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Apartman Finans Yönetim Sistemi</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f4f7f9; }
+        .card { box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06); }
+        .tab-button.active { border-color: #3b82f6; color: #3b82f6; font-weight: 600; background-color: #eff6ff; }
+        .fade-in { animation: fadeIn 0.5s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        /* Özel Kaydırma Çubuğu Stili */
+        .custom-scroll::-webkit-scrollbar { width: 6px; }
+        .custom-scroll::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 3px; }
+        .custom-scroll::-webkit-scrollbar-track { background-color: #f1f5f9; }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+    <script>
+        // Yönetici girişi kontrolü
+        if (sessionStorage.getItem('isAdminAuthenticated') !== 'true') {
+            window.location.href = 'login.html';
+        }
+    </script>
+
+    <!-- Ana Başlık ve Kullanıcı Bilgisi -->
+    <header class="mb-8">
+        <h1 class="text-3xl font-extrabold text-gray-800 mb-1">Apartman Yönetim Asistanı</h1>
+        <p class="text-sm text-gray-500 flex items-center">
+            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.121 17.804A13.937 13.937 0 0112 16c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0zm6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+            Kullanıcı ID: <span id="user-id" class="ml-1 font-mono text-xs bg-gray-200 px-2 py-0.5 rounded-full">Yükleniyor...</span>
+        </p>
+    </header>
+
+    <!-- Ana İstatistik Kartları -->
+    <div id="stats-container" class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <!-- Genel Bakiye Kartı -->
+        <div class="card bg-white p-6 rounded-xl border-t-4 border-blue-500">
+            <p class="text-sm font-medium text-gray-500">Genel Apartman Kasası</p>
+            <p id="overall-balance" class="text-3xl font-bold mt-1 text-gray-800">0.00 ₺</p>
+            <span class="text-xs text-gray-400">Tahsilatlar ve Ödemeler Dengesi</span>
+        </div>
+        <!-- Toplam Borç Kartı -->
+        <div class="card bg-white p-6 rounded-xl border-t-4 border-red-500">
+            <p class="text-sm font-medium text-gray-500">Toplam Daire Borcu</p>
+            <p id="total-debt" class="text-3xl font-bold mt-1 text-red-600">0.00 ₺</p>
+            <span class="text-xs text-gray-400">Apartmana Olan Borçlar</span>
+        </div>
+        <!-- Toplam Alacak Kartı -->
+        <div class="card bg-white p-6 rounded-xl border-t-4 border-green-500">
+            <p class="text-sm font-medium text-gray-500">Toplam Daire Alacağı</p>
+            <p id="total-credit" class="text-3xl font-bold mt-1 text-green-600">0.00 ₺</p>
+            <span class="text-xs text-gray-400">Apartmanın Dairelere Olan Borcu</span>
+        </div>
+    </div>
+
+    <!-- Sekmeli Navigasyon -->
+    <div class="flex border-b border-gray-300 mb-6">
+        <button id="tab-finans" onclick="changeTab('finans')" class="tab-button active p-3 text-sm rounded-t-lg transition duration-200 border-b-2 border-transparent hover:border-blue-300">
+            Finansal Hareketler
+        </button>
+        <button id="tab-daireler" onclick="changeTab('daireler')" class="tab-button p-3 text-sm rounded-t-lg transition duration-200 border-b-2 border-transparent hover:border-blue-300">
+            Daire ve Bakiyeler
+        </button>
+    </div>
+
+    <!-- İçerik Alanı -->
+    <main id="content-container">
+
+        <!-- Finansal Hareketler Sekmesi -->
+        <section id="finans-tab" class="fade-in">
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+                <!-- Yeni İşlem Ekleme Formu -->
+                <div class="lg:col-span-1 card bg-white p-6 rounded-xl h-fit sticky top-4">
+                    <h2 class="text-xl font-semibold mb-4 text-gray-700 border-b pb-2">Yeni İşlem Kaydı</h2>
+                    <form id="transaction-form" onsubmit="event.preventDefault(); saveTransaction();">
+
+                        <div class="mb-4">
+                            <label for="type" class="block text-sm font-medium text-gray-700 mb-1">İşlem Türü</label>
+                            <select id="type" required class="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 transition duration-150" onchange="updateCategoryForType()">
+                                <option value="" disabled selected>Seçiniz</option>
+                                <option value="Gelir">Gelir (Tahsilat)</option>
+                                <option value="Gider">Gider (Borçlandırma)</option>
+                            </select>
+                        </div>
+
+                        <div class="mb-4">
+                            <label for="apartment_id" class="block text-sm font-medium text-gray-700 mb-1">İlgili Daire/Blok (Opsiyonel)</label>
+                            <select id="apartment_id" class="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 transition duration-150">
+                                <option value="APARTMAN_GENEL">APARTMAN GENEL KASASI</option>
+                                <!-- Daireler buraya dinamik olarak yüklenecek -->
+                            </select>
+                            <p class="text-xs text-gray-500 mt-1">Aidat ödemesi, borçlandırma vb. için daireyi seçin.</p>
+                        </div>
+
+                        <div class="mb-4">
+                            <label for="category" class="block text-sm font-medium text-gray-700 mb-1">Kategori</label>
+                            <select id="category" required class="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 transition duration-150">
+                                <option value="Aidat Tahsilatı">Aidat Tahsilatı (Gelir)</option>
+                                <option value="Aidat Borçlandırması">Aidat Borçlandırması (Gider)</option>
+                                <option value="Temizlik Gideri">Temizlik Gideri (Gider)</option>
+                                <option value="Elektrik Faturası">Elektrik Faturası (Gider)</option>
+                                <option value="Su Faturası">Su Faturası (Gider)</option>
+                                <option value="Yakıt Gideri">Yakıt Gideri (Gider)</option>
+                                <option value="Onarım/Bakım">Onarım/Bakım (Gider)</option>
+                                <option value="Diğer Gelir">Diğer Gelir (Gelir)</option>
+                                <option value="Diğer Gider">Diğer Gider (Gider)</option>
+                            </select>
+                        </div>
+
+                        <div class="mb-4">
+                            <label for="amount" class="block text-sm font-medium text-gray-700 mb-1">Tutar (₺)</label>
+                            <input type="number" id="amount" required min="0.01" step="0.01" placeholder="Örn: 150.75" class="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 transition duration-150">
+                        </div>
+
+                        <div class="mb-4">
+                            <label for="description" class="block text-sm font-medium text-gray-700 mb-1">Açıklama</label>
+                            <textarea id="description" required placeholder="Örn: Ekim Ayı Aidat Ödemesi" rows="2" class="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 transition duration-150"></textarea>
+                        </div>
+
+                        <button type="submit" id="save-transaction-btn" class="w-full bg-blue-600 text-white p-3 rounded-lg font-semibold hover:bg-blue-700 transition duration-200">
+                            Kaydet
+                        </button>
+                    </form>
+                </div>
+
+                <!-- İşlem Listesi ve Raporlar -->
+                <div class="lg:col-span-2 card bg-white p-6 rounded-xl">
+                    <h2 class="text-xl font-semibold mb-4 text-gray-700 border-b pb-2">Son Finansal Hareketler</h2>
+
+                    <!-- Filtreler -->
+                    <div class="mb-4 flex flex-col sm:flex-row gap-3">
+                        <select id="filter-type" onchange="renderTransactions()" class="p-2 border border-gray-300 rounded-lg text-sm">
+                            <option value="">Tüm İşlemler</option>
+                            <option value="Gelir">Sadece Gelirler</option>
+                            <option value="Gider">Sadece Giderler</option>
+                        </select>
+                        <select id="filter-category" onchange="renderTransactions()" class="p-2 border border-gray-300 rounded-lg text-sm">
+                            <option value="">Tüm Kategoriler</option>
+                            <option value="Aidat Tahsilatı">Aidat Tahsilatı</option>
+                            <option value="Temizlik Gideri">Temizlik Gideri</option>
+                            <option value="Elektrik Faturası">Elektrik Faturası</option>
+                            <option value="Su Faturası">Su Faturası</option>
+                            <option value="Yakıt Gideri">Yakıt Gideri</option>
+                            <option value="Onarım/Bakım">Onarım/Bakım</option>
+                            <option value="Diğer Gelir">Diğer Gelir</option>
+                            <option value="Diğer Gider">Diğer Gider</option>
+                        </select>
+                        <button onclick="downloadFinancialReport()" class="bg-green-500 text-white p-2 rounded-lg text-sm hover:bg-green-600 transition duration-150 flex items-center justify-center">
+                            <svg class="w-5 h-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                            Rapor İndir (Excel)
+                        </button>
+                    </div>
+
+
+                    <div id="transaction-list-container" class="custom-scroll max-h-[600px] overflow-y-auto">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead class="bg-gray-50 sticky top-0">
+                                <tr>
+                                    <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tarih</th>
+                                    <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Açıklama</th>
+                                    <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Daire</th>
+                                    <th class="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Kategori</th>
+                                    <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Tutar (₺)</th>
+                                </tr>
+                            </thead>
+                            <tbody id="transaction-list" class="bg-white divide-y divide-gray-200">
+                                <!-- İşlemler buraya yüklenecek -->
+                            </tbody>
+                        </table>
+                        <p id="no-transactions" class="text-center text-gray-500 p-8 hidden">Henüz bir işlem kaydı yok.</p>
+                    </div>
+
+                    <div id="loading-transactions" class="text-center p-8 text-blue-500 hidden">
+                        <svg class="animate-spin h-6 w-6 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Veriler yükleniyor...
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Daire ve Bakiyeler Sekmesi -->
+        <section id="daireler-tab" class="fade-in hidden">
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- Yeni Daire Ekleme/Düzenleme Formu -->
+                <div class="lg:col-span-1 card bg-white p-6 rounded-xl h-fit sticky top-4">
+                    <h2 id="apartment-form-title" class="text-xl font-semibold mb-4 text-gray-700 border-b pb-2">Yeni Daire Ekle</h2>
+                    <form id="apartment-form" onsubmit="event.preventDefault(); saveApartment();">
+                        <input type="hidden" id="editing-apartment-id">
+                        <div class="mb-4">
+                            <label for="apartment_number" class="block text-sm font-medium text-gray-700 mb-1">Daire/Blok No</label>
+                            <input type="text" id="apartment_number" required placeholder="Örn: B Blok 12/A" class="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 transition duration-150">
+                        </div>
+
+                        <div class="mb-4">
+                            <label for="resident_name" class="block text-sm font-medium text-gray-700 mb-1">Daire Sakini (Ad-Soyad)</label>
+                            <input type="text" id="resident_name" required placeholder="Örn: Ahmet Yılmaz" class="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 transition duration-150">
+                        </div>
+
+                        <div class="mb-4">
+                            <label for="initial_balance" class="block text-sm font-medium text-gray-700 mb-1">Başlangıç Bakiyesi (₺)</label>
+                            <input type="number" id="initial_balance" value="0.00" step="0.01" placeholder="Örn: -500.00 (Borç ise eksi)" class="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 transition duration-150">
+                            <p class="text-xs text-gray-500 mt-1">Borç için eksi değer girin (-500), alacak için pozitif değer (500).</p>
+                        </div>
+
+                        <div class="flex flex-col sm:flex-row gap-2">
+                            <button type="submit" id="save-apartment-btn" class="w-full bg-blue-600 text-white p-3 rounded-lg font-semibold hover:bg-blue-700 transition duration-200">
+                                Daireyi Ekle
+                            </button>
+                            <button type="button" id="cancel-edit-btn" onclick="resetApartmentForm()" class="w-full bg-gray-500 text-white p-3 rounded-lg font-semibold hover:bg-gray-600 transition duration-200 hidden">
+                                İptal
+                            </button>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Daire Listesi ve Bakiyeler -->
+                <div class="lg:col-span-2 card bg-white p-6 rounded-xl">
+                    <h2 class="text-xl font-semibold mb-4 text-gray-700 border-b pb-2">Daire Bakiyeleri (Borç/Alacak)</h2>
+
+                    <div id="apartment-list-container" class="custom-scroll max-h-[600px] overflow-y-auto">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead class="bg-gray-50 sticky top-0">
+                                <tr>
+                                    <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Daire No / Sakin</th>
+                                    <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Bakiye (₺)</th>
+                                    <th class="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">İşlemler</th>
+                                </tr>
+                            </thead>
+                            <tbody id="apartment-list" class="bg-white divide-y divide-gray-200">
+                                <!-- Daireler buraya yüklenecek -->
+                            </tbody>
+                        </table>
+                        <p id="no-apartments" class="text-center text-gray-500 p-8 hidden">Henüz kayıtlı daire yok.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Global Mesaj Kutusu -->
+    <div id="message-box" class="fixed bottom-4 right-4 z-50 transition-transform duration-300 transform translate-x-full">
+        <!-- Mesajlar buraya dinamik olarak eklenecek -->
+    </div>
+
+    <!-- Firebase Script ve Uygulama Mantığı -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, onSnapshot, collection, query, orderBy, getDocs, runTransaction, where } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Global Firebase değişkenleri ve Sabitler
+        let app;
+        let db;
+        let auth;
+        let userId = 'default-user';
+        const APP_ID = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+
+        // Uygulama verileri
+        let apartments = [];
+        let transactions = [];
+        let isAuthReady = false;
+
+        // Firebase Yapılandırması ve Başlatma
+        try {
+            const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+            app = initializeApp(firebaseConfig);
+            db = getFirestore(app);
+            auth = getAuth(app);
+
+            // Yetkilendirme (Authentication)
+            onAuthStateChanged(auth, async (user) => {
+                if (user) {
+                    userId = user.uid;
+                    document.getElementById('user-id').textContent = userId;
+                    isAuthReady = true;
+                    // Yetkilendirme tamamlandığında veri dinlemeyi başlat
+                    startDataListeners();
+                } else {
+                    // Kullanıcı oturumu yoksa anonim olarak oturum açmayı dene
+                    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                        await signInWithCustomToken(auth, __initial_auth_token);
+                    } else {
+                        await signInAnonymously(auth);
+                    }
+                }
+            });
+
+        } catch (error) {
+            console.error("Firebase başlatılırken bir hata oluştu:", error);
+            document.getElementById('user-id').textContent = "HATA (Konsolu Kontrol Edin)";
+            showStatusMessage('Sistem Hatası: Firebase başlatılamadı.', 'error');
+        }
+
+        // Firestore Koleksiyon Yolları
+        const getApartmentCollectionRef = () => collection(db, `artifacts/${APP_ID}/users/${userId}/apartments`);
+        const getTransactionCollectionRef = () => collection(db, `artifacts/${APP_ID}/users/${userId}/transactions`);
+        const getStatsDocRef = () => doc(db, `artifacts/${APP_ID}/users/${userId}/summary/stats`);
+
+        // --- Veri Dinleyicileri (Realtime) ---
+        function startDataListeners() {
+            if (!isAuthReady) return;
+
+            // 1. Daireler Dinleyicisi
+            onSnapshot(query(getApartmentCollectionRef()), (snapshot) => {
+                apartments = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                renderApartments();
+                updateApartmentSelect();
+                updateStats();
+                console.log("Daireler güncellendi:", apartments.length);
+            }, (error) => {
+                console.error("Daireleri dinlerken hata:", error);
+                showStatusMessage('Daire verileri yüklenirken hata oluştu.', 'error');
+            });
+
+            // 2. İşlemler Dinleyicisi
+            // Firestore'da orderBy'dan kaçınmak için tüm veriyi çekip JS'te sıralıyoruz
+            document.getElementById('loading-transactions').classList.remove('hidden');
+            onSnapshot(getTransactionCollectionRef(), (snapshot) => {
+                transactions = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), timestamp: doc.data().timestamp?.toDate() || new Date(0) }));
+                renderTransactions();
+                updateStats();
+                document.getElementById('loading-transactions').classList.add('hidden');
+                console.log("İşlemler güncellendi:", transactions.length);
+            }, (error) => {
+                console.error("İşlemleri dinlerken hata:", error);
+                showStatusMessage('İşlem verileri yüklenirken hata oluştu.', 'error');
+                document.getElementById('loading-transactions').classList.add('hidden');
+            });
+
+            // 3. Genel İstatistikler Dinleyicisi (Opsiyonel, sadece manuel hesaplama için)
+            // İstatistikleri transaction ve apartment listelerinden hesaplıyoruz, bu doc'a ihtiyaç kalmıyor.
+        }
+
+        // --- Yardımcı Fonksiyonlar ---
+
+        function formatCurrency(amount) {
+            return new Intl.NumberFormat('tr-TR', {
+                style: 'currency',
+                currency: 'TRY',
+            }).format(amount);
+        }
+
+        function formatDate(date) {
+            if (!date) return 'Tarih Yok';
+            return new Intl.DateTimeFormat('tr-TR', {
+                year: 'numeric', month: '2-digit', day: '2-digit',
+                hour: '2-digit', minute: '2-digit'
+            }).format(date);
+        }
+
+        function showStatusMessage(message, type = 'info') {
+            const box = document.getElementById('message-box');
+            const color = type === 'error' ? 'bg-red-500' : type === 'success' ? 'bg-green-500' : 'bg-blue-500';
+
+            const msgDiv = document.createElement('div');
+            msgDiv.className = `p-4 mb-2 rounded-lg text-white ${color} card shadow-xl`;
+            msgDiv.textContent = message;
+
+            box.appendChild(msgDiv);
+            box.classList.remove('translate-x-full');
+            box.classList.add('translate-x-0');
+
+            setTimeout(() => {
+                msgDiv.classList.add('opacity-0', 'transition-opacity');
+                setTimeout(() => {
+                    box.removeChild(msgDiv);
+                    if (box.children.length === 0) {
+                        box.classList.remove('translate-x-0');
+                        box.classList.add('translate-x-full');
+                    }
+                }, 500);
+            }, 5000);
+        }
+
+        function changeTab(tabName) {
+            document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('#content-container > section').forEach(section => section.classList.add('hidden'));
+
+            document.getElementById(`tab-${tabName}`).classList.add('active');
+            document.getElementById(`${tabName}-tab`).classList.remove('hidden');
+        }
+
+        // --- Veri Güncelleme ve Hesaplama ---
+
+        function updateStats() {
+            let overallBalance = 0;
+            let totalDebt = 0; // Apartmana borcu olanlar (Negatif Bakiye)
+            let totalCredit = 0; // Apartmanın borcu olanlar (Pozitif Bakiye)
+
+            // 1. İşlemlerden Genel Kasa Bakiyesi Hesaplama
+            transactions.forEach(t => {
+                const amount = parseFloat(t.amount);
+                if (t.type === 'Gelir') {
+                    overallBalance += amount;
+                } else if (t.type === 'Gider') {
+                    overallBalance -= amount;
+                }
+            });
+
+            // 2. Daire Bakiyeleri Hesaplama (Sadece 'apartments' koleksiyonundaki verilerden)
+            apartments.forEach(ap => {
+                const initial = parseFloat(ap.initial_balance || 0);
+                let apartmentBalance = initial;
+
+                // Daireye özel işlemleri topla
+                transactions.filter(t => t.apartment_id === ap.id).forEach(t => {
+                    const amount = parseFloat(t.amount);
+                    // Daire için: Gelir (ödeme) bakiyeyi artırır, Gider (borçlandırma) bakiyeyi azaltır.
+                    if (t.type === 'Gelir') {
+                        apartmentBalance += amount;
+                    } else if (t.type === 'Gider') {
+                        apartmentBalance -= amount;
+                    }
+                });
+
+                // Bakiye türünü belirle
+                if (apartmentBalance < 0) {
+                    totalDebt += Math.abs(apartmentBalance); // Apartmana borç (Dairenin bakiyesi negatif)
+                    ap.balance = apartmentBalance;
+                } else {
+                    totalCredit += apartmentBalance; // Apartmanın borcu (Dairenin bakiyesi pozitif)
+                    ap.balance = apartmentBalance;
+                }
+            });
+
+            // İstatistikleri DOM'a yaz
+            document.getElementById('overall-balance').textContent = formatCurrency(overallBalance);
+            document.getElementById('total-debt').textContent = formatCurrency(totalDebt);
+            document.getElementById('total-credit').textContent = formatCurrency(totalCredit);
+
+            // Daire listesini güncellemek için çağır
+            renderApartments();
+        }
+
+        // --- Daire İşlemleri ---
+
+        function editApartment(id) {
+            const apartment = apartments.find(ap => ap.id === id);
+            if (!apartment) return;
+
+            document.getElementById('editing-apartment-id').value = id;
+            document.getElementById('apartment_number').value = apartment.apartment_number;
+            document.getElementById('resident_name').value = apartment.resident_name;
+            document.getElementById('initial_balance').value = apartment.initial_balance;
+
+            // Başlangıç bakiyesini düzenlemeyi engelle
+            document.getElementById('initial_balance').disabled = true;
+
+
+            document.getElementById('apartment-form-title').textContent = 'Daireyi Düzenle';
+            document.getElementById('save-apartment-btn').textContent = 'Güncelle';
+            document.getElementById('cancel-edit-btn').classList.remove('hidden');
+
+            // Forma odaklan
+            document.getElementById('apartment_number').focus();
+        }
+
+        function resetApartmentForm() {
+            document.getElementById('apartment-form').reset();
+            document.getElementById('editing-apartment-id').value = '';
+            document.getElementById('initial_balance').disabled = false;
+            document.getElementById('apartment-form-title').textContent = 'Yeni Daire Ekle';
+            document.getElementById('save-apartment-btn').textContent = 'Daireyi Ekle';
+            document.getElementById('cancel-edit-btn').classList.add('hidden');
+        }
+
+        async function saveApartment() {
+            if (!isAuthReady) {
+                showStatusMessage('Sistem yükleniyor. Lütfen bekleyin.', 'info');
+                return;
+            }
+
+            const editingId = document.getElementById('editing-apartment-id').value;
+            const number = document.getElementById('apartment_number').value.trim();
+            const resident = document.getElementById('resident_name').value.trim();
+            const initialBalance = parseFloat(document.getElementById('initial_balance').value || 0);
+            const saveBtn = document.getElementById('save-apartment-btn');
+            saveBtn.disabled = true;
+            saveBtn.textContent = 'Kaydediliyor...';
+
+            if (!number || !resident) {
+                showStatusMessage('Lütfen Daire No ve Sakin adını girin.', 'error');
+                saveBtn.disabled = false;
+                saveBtn.textContent = editingId ? 'Güncelle' : 'Daireyi Ekle';
+                return;
+            }
+
+            const apartmentData = {
+                apartment_number: number,
+                resident_name: resident,
+                // Sadece yeni daire eklenirken başlangıç bakiyesi ayarlanır
+                ...(editingId ? {} : { initial_balance: initialBalance, created_at: new Date() })
+            };
+
+
+            try {
+                if (editingId) {
+                    // Düzenleme
+                    const apartmentRef = doc(getApartmentCollectionRef(), editingId);
+                    await setDoc(apartmentRef, apartmentData, { merge: true }); // merge:true ile sadece belirtilen alanları günceller
+                    showStatusMessage(`Daire ${number} başarıyla güncellendi.`, 'success');
+                } else {
+                    // Yeni Ekleme
+                    const newApartmentRef = doc(getApartmentCollectionRef());
+                    await setDoc(newApartmentRef, apartmentData);
+                    showStatusMessage(`Daire ${number} başarıyla eklendi.`, 'success');
+                }
+                resetApartmentForm();
+            } catch (e) {
+                console.error("Daire kaydedilirken hata: ", e);
+                showStatusMessage('Daire kaydedilirken bir hata oluştu.', 'error');
+            } finally {
+                saveBtn.disabled = false;
+                // Buton metnini eski haline getir
+                saveBtn.textContent = document.getElementById('editing-apartment-id').value ? 'Güncelle' : 'Daireyi Ekle';
+            }
+        }
+
+        async function deleteApartment(id, number) {
+            if (!confirm(`Daire ${number} ve bu daireye ait tüm hareketler silinecektir. Emin misiniz?`)) return;
+
+            try {
+                // 1. İşlemleri sil (Daireye ait olanları bul)
+                const q = query(getTransactionCollectionRef(), where("apartment_id", "==", id));
+                const querySnapshot = await getDocs(q);
+
+                await runTransaction(db, async (transaction) => {
+                    // Daireye ait işlemleri silme
+                    querySnapshot.forEach((doc) => {
+                        transaction.delete(doc.ref);
+                    });
+                    // Daireyi silme
+                    const apartmentRef = doc(getApartmentCollectionRef(), id);
+                    transaction.delete(apartmentRef);
+                });
+
+                showStatusMessage(`Daire ${number} ve ilgili tüm işlemler silindi.`, 'success');
+            } catch (e) {
+                console.error("Daire silinirken hata: ", e);
+                showStatusMessage('Daire silinirken bir hata oluştu.', 'error');
+            }
+        }
+
+        function renderApartments() {
+            const list = document.getElementById('apartment-list');
+            list.innerHTML = '';
+
+            if (apartments.length === 0) {
+                document.getElementById('no-apartments').classList.remove('hidden');
+                return;
+            }
+            document.getElementById('no-apartments').classList.add('hidden');
+
+            // Bakiye (balance) değerine göre sırala (Borçlular yukarıda, alacaklılar aşağıda)
+            const sortedApartments = [...apartments].sort((a, b) => a.balance - b.balance);
+
+            sortedApartments.forEach(ap => {
+                const balance = parseFloat(ap.balance || 0);
+                let balanceClass = 'text-gray-700';
+                let balanceText = formatCurrency(Math.abs(balance));
+                let actionButtons = '';
+                let rowClass = '';
+
+                if (balance < 0) {
+                    balanceClass = 'text-red-600 font-bold';
+                    balanceText = formatCurrency(Math.abs(balance)) + ' (Borç)';
+                    rowClass = 'bg-red-50 hover:bg-red-100';
+                    // Borcu varsa "Ödeme Yap" butonu ekle
+                    actionButtons += `
+                        <button onclick="markAsPaid('${ap.id}', ${Math.abs(balance)}, '${ap.apartment_number}')" class="text-green-500 hover:text-green-700 transition duration-150 p-1 rounded-full hover:bg-green-100" title="Ödendi Olarak İşaretle">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                        </button>
+                    `;
+                } else if (balance > 0) {
+                    balanceClass = 'text-green-600 font-bold';
+                    balanceText = formatCurrency(balance) + ' (Alacak)';
+                    rowClass = 'bg-green-50 hover:bg-green-100';
+                } else {
+                    rowClass = 'hover:bg-gray-50';
+                }
+
+                const row = `
+                    <tr class="${rowClass} transition duration-150">
+                        <td class="px-3 py-3 whitespace-nowrap">
+                            <div class="text-sm font-semibold text-gray-900">${ap.apartment_number}</div>
+                            <div class="text-xs text-gray-500">${ap.resident_name}</div>
+                        </td>
+                        <td class="px-3 py-3 whitespace-nowrap text-right text-sm ${balanceClass}">
+                            ${balanceText}
+                        </td>
+                        <td class="px-3 py-3 whitespace-nowrap text-center">
+                            ${actionButtons}
+                            <button onclick="editApartment('${ap.id}')" class="text-blue-500 hover:text-blue-700 transition duration-150 p-1 rounded-full hover:bg-blue-100" title="Daireyi Düzenle">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.5L15.232 5.232z"></path></svg>
+                            </button>
+                            <button onclick="deleteApartment('${ap.id}', '${ap.apartment_number}')" class="text-red-500 hover:text-red-700 transition duration-150 p-1 rounded-full hover:bg-red-100" title="Daireyi Sil">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                            </button>
+                        </td>
+                    </tr>
+                `;
+                list.insertAdjacentHTML('beforeend', row);
+            });
+        }
+
+        function updateApartmentSelect() {
+            const select = document.getElementById('apartment_id');
+            // 'APARTMAN GENEL KASASI' seçeneğini korumak için ilk öğeden sonrasını temizle
+            select.innerHTML = select.children[0].outerHTML;
+
+            apartments.forEach(ap => {
+                const option = document.createElement('option');
+                option.value = ap.id;
+                option.textContent = `${ap.apartment_number} - ${ap.resident_name}`;
+                select.appendChild(option);
+            });
+        }
+
+        // --- İşlem (Transaction) İşlemleri ---
+
+        async function saveTransaction() {
+            if (!isAuthReady) {
+                showStatusMessage('Sistem yükleniyor. Lütfen bekleyin.', 'info');
+                return;
+            }
+
+            const type = document.getElementById('type').value;
+            const apartmentId = document.getElementById('apartment_id').value;
+            const category = document.getElementById('category').value;
+            const amount = parseFloat(document.getElementById('amount').value);
+            const description = document.getElementById('description').value.trim();
+            const saveBtn = document.getElementById('save-transaction-btn');
+            saveBtn.disabled = true;
+            saveBtn.textContent = 'Kaydediliyor...';
+
+            if (!type || !category || isNaN(amount) || amount <= 0 || !description) {
+                showStatusMessage('Lütfen tüm alanları doğru şekilde doldurun.', 'error');
+                saveBtn.disabled = false;
+                saveBtn.textContent = 'Kaydet';
+                return;
+            }
+
+            const selectedApartment = apartments.find(ap => ap.id === apartmentId);
+            const apartmentNumber = selectedApartment ? selectedApartment.apartment_number : 'Genel Kasa';
+
+            try {
+                // Firestore'a kaydetme
+                const newTransactionRef = doc(getTransactionCollectionRef());
+
+                await setDoc(newTransactionRef, {
+                    type,
+                    apartment_id: apartmentId, // Daire ID'si veya APARTMAN_GENEL
+                    apartment_number: apartmentNumber, // Kolay raporlama için metin alanı
+                    category,
+                    amount,
+                    description,
+                    timestamp: new Date()
+                });
+
+                showStatusMessage(`${type} işlemi başarıyla kaydedildi: ${formatCurrency(amount)}`, 'success');
+                document.getElementById('transaction-form').reset();
+                document.getElementById('apartment_id').value = 'APARTMAN_GENEL'; // Formu sıfırla
+            } catch (e) {
+                console.error("İşlem kaydedilirken hata: ", e);
+                showStatusMessage('İşlem kaydedilirken bir hata oluştu.', 'error');
+            } finally {
+                saveBtn.disabled = false;
+                saveBtn.textContent = 'Kaydet';
+            }
+        }
+
+        function renderTransactions() {
+            const list = document.getElementById('transaction-list');
+            const filterType = document.getElementById('filter-type').value;
+            const filterCategory = document.getElementById('filter-category').value;
+            list.innerHTML = '';
+
+            let filteredTransactions = transactions;
+
+            // Filtreleme
+            if (filterType) {
+                filteredTransactions = filteredTransactions.filter(t => t.type === filterType);
+            }
+            if (filterCategory) {
+                filteredTransactions = filteredTransactions.filter(t => t.category === filterCategory);
+            }
+
+            // Tarihe göre ters sırala (En yeni üstte)
+            const sortedTransactions = filteredTransactions.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+
+            if (sortedTransactions.length === 0) {
+                document.getElementById('no-transactions').classList.remove('hidden');
+                return;
+            }
+            document.getElementById('no-transactions').classList.add('hidden');
+
+
+            sortedTransactions.forEach(t => {
+                const isGelir = t.type === 'Gelir';
+                const amountClass = isGelir ? 'text-green-600 font-semibold' : 'text-red-600 font-semibold';
+                const sign = isGelir ? '+' : '-';
+                const apartmentDisplay = t.apartment_number === 'Genel Kasa' ?
+                    `<span class="text-xs text-gray-500">Genel Kasa</span>` :
+                    `<span class="text-sm font-medium">${t.apartment_number}</span>`;
+
+                const row = `
+                    <tr class="hover:bg-gray-50 transition duration-150">
+                        <td class="px-3 py-3 whitespace-nowrap text-xs text-gray-500">${formatDate(t.timestamp)}</td>
+                        <td class="px-3 py-3 whitespace-normal">
+                            <div class="text-sm font-medium text-gray-900">${t.description}</div>
+                            <div class="text-xs text-blue-600">${t.category}</div>
+                        </td>
+                        <td class="px-3 py-3 whitespace-nowrap text-center">${apartmentDisplay}</td>
+                        <td class="px-3 py-3 whitespace-nowrap text-center">
+                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${isGelir ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">
+                                ${t.type}
+                            </span>
+                        </td>
+                        <td class="px-3 py-3 whitespace-nowrap text-right ${amountClass}">
+                            ${sign} ${formatCurrency(t.amount)}
+                        </td>
+                    </tr>
+                `;
+                list.insertAdjacentHTML('beforeend', row);
+            });
+        }
+
+        // --- Excel Raporu Çıkarma ---
+
+        function downloadFinancialReport() {
+            if (transactions.length === 0) {
+                showStatusMessage('İndirilecek bir işlem bulunmamaktadır.', 'info');
+                return;
+            }
+
+            // Başlık satırı
+            let csvContent = "Tarih,Tip,Kategori,Açıklama,Daire No,Tutar (TL)\n";
+
+            // Verileri döngüye al
+            transactions.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime()).forEach(t => {
+                const amount = t.type === 'Gelir' ? t.amount : -t.amount;
+                const row = [
+                    formatDate(t.timestamp),
+                    t.type,
+                    t.category,
+                    t.description.replace(/,/g, ''), // Virgülleri temizle
+                    t.apartment_number,
+                    amount.toFixed(2).replace('.', ',') // Türkçe format (virgül ondalık ayırıcı)
+                ].join(',');
+                csvContent += row + "\n";
+            });
+
+            const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' }); // BOM ekle (Türkçe karakterler için)
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.setAttribute('href', url);
+            a.setAttribute('download', `Apartman_Finans_Raporu_${new Date().toISOString().slice(0, 10)}.csv`);
+            a.style.display = 'none';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+
+            showStatusMessage('Finansal raporunuz Excel formatında indiriliyor...', 'success');
+        }
+
+        // --- Ödeme İşlemleri ---
+
+        async function markAsPaid(apartmentId, amount, apartmentNumber) {
+            if (!confirm(`${apartmentNumber} dairesinin ${formatCurrency(amount)} tutarındaki borcunu 'Ödendi' olarak işaretlemek istediğinizden emin misiniz? Bu işlem, otomatik bir 'Aidat Tahsilatı' kaydı oluşturacaktır.`)) {
+                return;
+            }
+
+            try {
+                // Otomatik bir 'Gelir' işlemi oluştur
+                const newTransactionRef = doc(getTransactionCollectionRef());
+                await setDoc(newTransactionRef, {
+                    type: 'Gelir',
+                    apartment_id: apartmentId,
+                    apartment_number: apartmentNumber,
+                    category: 'Aidat Tahsilatı',
+                    amount: amount,
+                    description: `${apartmentNumber} - Otomatik Borç Kapama`,
+                    timestamp: new Date()
+                });
+                showStatusMessage(`${apartmentNumber} dairesinin borcu ödendi olarak kaydedildi.`, 'success');
+            } catch (e) {
+                console.error("Ödeme kaydedilirken hata:", e);
+                showStatusMessage('Ödeme kaydedilirken bir hata oluştu.', 'error');
+            }
+        }
+
+
+        function updateCategoryForType() {
+            const type = document.getElementById('type').value;
+            const categorySelect = document.getElementById('category');
+            if (type === 'Gelir') {
+                categorySelect.value = 'Aidat Tahsilatı';
+            } else if (type === 'Gider') {
+                categorySelect.value = 'Aidat Borçlandırması';
+            }
+        }
+
+
+        // Global fonksiyonları dışa aktarma
+        window.changeTab = changeTab;
+        window.saveApartment = saveApartment;
+        window.deleteApartment = deleteApartment;
+        window.saveTransaction = saveTransaction;
+        window.renderTransactions = renderTransactions;
+        window.downloadFinancialReport = downloadFinancialReport;
+        window.signOut = signOut; // Firebase'den çıkış fonksiyonunu ileride kullanmak üzere ekleyelim
+        window.auth = auth; // Konsol erişimi için
+        window.editApartment = editApartment;
+        window.resetApartmentForm = resetApartmentForm;
+        window.markAsPaid = markAsPaid;
+        window.updateCategoryForType = updateCategoryForType;
+
+        // Başlangıçta Finans sekmesini aktif et
+        document.addEventListener('DOMContentLoaded', () => {
+            changeTab('finans');
+        });
+
+    </script>
+</body>
+</html>
